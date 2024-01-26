@@ -1,10 +1,6 @@
-use crate::Vec2;
+use ordered_float::NotNan;
 
-#[derive(Clone)]
-struct Vertice {
-    pos: Vec2,
-    visited: bool,
-}
+use crate::{Route, Vec2};
 
 pub fn dist_squared(pos1: &Vec2, pos2: &Vec2) -> f64 {
     (pos2.x - pos1.x).powi(2) + (pos2.y - pos1.y).powi(2)
@@ -14,45 +10,49 @@ pub fn dist_squared(pos1: &Vec2, pos2: &Vec2) -> f64 {
 //     dist_squared(pos1, pos2).sqrt()
 // }
 
-pub fn solve(starting_point: Vec2, points: impl Iterator<Item = Vec2>) -> Vec<usize> {
-    let mut vertices = points
-        .map(|pos| Vertice {
-            pos,
-            visited: false,
-        })
-        .collect::<Vec<Vertice>>();
+fn find_path(route: &Route, p1: usize, p2: usize) -> Option<(Vec<usize>, NotNan<f64>)> {
+    pathfinding::directed::astar::astar(
+        &p1,
+        |p| {
+            route
+                .connections_dict
+                .get(p)
+                .unwrap()
+                .iter()
+                .map(|next| {
+                    (
+                        *next,
+                        NotNan::new(dist_squared(&route.points[*p], &route.points[*next])).unwrap(),
+                    )
+                })
+                .collect::<Vec<(usize, NotNan<f64>)>>()
+        },
+        |p| NotNan::new(dist_squared(&route.points[*p], &route.points[p2])).unwrap(),
+        |p| *p == p2,
+    )
+}
 
-    let mut route = vec![];
-    let mut current_vertice = Vertice {
-        pos: starting_point,
-        visited: true,
-    };
-    loop {
-        let mut unvisited = vertices
-            .iter_mut()
+pub fn solve(route: Route, starting_point: usize, points: Vec<usize>) -> Vec<(usize, Vec<usize>)> {
+    let mut current_point = starting_point;
+    let mut remaining_points = points;
+    let mut path = vec![];
+    while !remaining_points.is_empty() {
+        let mut closest_point_index = 0usize;
+        let mut smallest_distance = std::f64::MAX;
+        let mut smallest_path = vec![];
+        remaining_points
+            .iter()
             .enumerate()
-            .filter(|(_index, v)| !v.visited)
-            .peekable();
-
-        if unvisited.peek().is_none() {
-            break;
-        }
-
-        let closest = unvisited
-            .reduce(|left, right| {
-                if dist_squared(&left.1.pos, &current_vertice.pos)
-                    < dist_squared(&right.1.pos, &current_vertice.pos)
-                {
-                    left
-                } else {
-                    right
+            .for_each(|(index, point)| {
+                let (path, distance) = find_path(&route, current_point, *point).unwrap();
+                if *distance < smallest_distance {
+                    smallest_distance = *distance;
+                    closest_point_index = index;
+                    smallest_path = path;
                 }
-            })
-            .unwrap();
-
-        closest.1.visited = true;
-        current_vertice = closest.1.clone();
-        route.push(closest.0);
+            });
+        current_point = remaining_points.remove(closest_point_index);
+        path.push((current_point, smallest_path));
     }
-    route
+    path
 }
