@@ -1,3 +1,4 @@
 build:
 	wasm-pack build --target web
-	mv pkg/* ../front-end/tsp-pkg/
+	mkdir ../walmart-goback-frontend/tsp-pkg/
+	mv pkg/* ../walmart-goback-frontend/tsp-pkg/
